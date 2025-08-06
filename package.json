@@ -1,0 +1,24 @@
+{
+  "name": "cyber-stressor",
+  "version": "1.0.0",
+  "description": "Ferramenta de teste de carga para websites com interface estilo hacker",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "stress-test",
+    "load-testing",
+    "hacker",
+    "performance"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "autocannon": "^7.10.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
+}
