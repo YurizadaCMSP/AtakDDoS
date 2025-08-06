@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYBER STRESSOR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+    
+    :root {
+      --neon-green: #39ff14;
+      --dark-bg: #0a0a0a;
+      --matrix-green: #00ff41;
+      --terminal-green: #4af626;
+    }
+    
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background-color: var(--dark-bg);
+      color: var(--terminal-green);
+    }
+    
+    .terminal-window {
+      border: 1px solid var(--neon-green);
+      box-shadow: 0 0 10px var(--neon-green);
+    }
+    
+    .neon-text {
+      text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green);
+    }
+    
+    .matrix-bg {
+      background-color: rgba(0, 20, 0, 0.8);
+    }
+    
+    .hacker-input {
+      background-color: rgba(0, 20, 0, 0.6);
+      border: 1px solid var(--neon-green);
+      color: var(--terminal-green);
+    }
+    
+    .hacker-button {
+      background-color: transparent;
+      border: 1px solid var(--neon-green);
+      color: var(--neon-green);
+      transition: all 0.3s ease;
+    }
+    
+    .hacker-button:hover {
+      background-color: var(--neon-green);
+      color: black;
+      box-shadow: 0 0 10px var(--neon-green);
+    }
+    
+    .log-line {
+      border-bottom: 1px dashed rgba(57, 255, 20, 0.3);
+    }
+    
+    /* Terminal effect with scan line */
+    .terminal-effect {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .terminal-effect::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        rgba(57, 255, 20, 0.03) 50%,
+        rgba(0, 0, 0, 0.02) 50%
+      );
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 100;
+    }
+    
+    /* Matrix rain animation */
+    @keyframes matrix-rain {
+      0% {
+        background-position: 0% 0%;
+      }
+      100% {
+        background-position: 0% 100%;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen terminal-effect" x-data="appData()">
+  <div class="container mx-auto px-4 py-8">
+    <header class="mb-8 text-center">
+      <h1 class="text-4xl font-bold neon-text tracking-wider mb-2">CYBER STRESSOR</h1>
+      <p class="text-md opacity-80">Ferramenta de Teste de Carga para Websites</p>
+    </header>
+    
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Painel de Controle -->
+      <div class="terminal-window matrix-bg p-4 rounded-lg col-span-1">
+        <h2 class="text-xl font-bold mb-4 border-b border-green-500 pb-2">Painel de Controle</h2>
+        
+        <form @submit.prevent="startTest" class="space-y-4">
+          <div>
+            <label class="block mb-1">Alvo (domínio ou URL)</label>
+            <input type="text" x-model="target" class="hacker-input w-full p-2 rounded" placeholder="sosfirst.site">
+          </div>
+          
+          <div>
+            <label class="block mb-1">Requisições por Segundo</label>
+            <input type="number" x-model="rps" class="hacker-input w-full p-2 rounded" min="1" max="1000" placeholder="100">
+          </div>
+          
+          <div>
+            <label class="block mb-1">Duração do Teste (segundos)</label>
+            <input type="number" x-model="duration" class="hacker-input w-full p-2 rounded" min="5" max="300" placeholder="30">
+          </div>
+          
+          <div class="flex items-center justify-between pt-2">
+            <button type="submit" class="hacker-button px-6 py-2 rounded font-bold text-lg" :disabled="testRunning">
+              <span x-show="!testRunning">INICIAR ATAQUE</span>
+              <span x-show="testRunning">PROCESSANDO...</span>
+            </button>
+            
+            <div x-show="testRunning" class="flex items-center">
+              <div class="animate-pulse h-3 w-3 bg-green-500 rounded-full mr-2"></div>
+              <span class="text-sm">Em execução</span>
+            </div>
+          </div>
+        </form>
+      </div>
+      
+      <!-- Painel de Estatísticas -->
+      <div class="terminal-window matrix-bg p-4 rounded-lg col-span-2">
+        <h2 class="text-xl font-bold mb-4 border-b border-green-500 pb-2">Estatísticas em Tempo Real</h2>
+        
+        <div x-show="!testRunning && !hasResults" class="h-64 flex items-center justify-center text-center">
+          <p class="opacity-70">Inicie um teste para ver estatísticas em tempo real</p>
+        </div>
+        
+        <div x-show="testRunning || hasResults" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-black bg-opacity-50 p-3 rounded border border-green-500">
+              <h3 class="text-sm opacity-70 mb-1">Requisições/Segundo</h3>
+              <p class="text-2xl font-bold" x-text="currentStats.rps || 0"></p>
+            </div>
+            
+            <div class="bg-black bg-opacity-50 p-3 rounded border border-green-500">
+              <h3 class="text-sm opacity-70 mb-1">Latência Média (ms)</h3>
+              <p class="text-2xl font-bold" x-text="currentStats.latency || 0"></p>
+            </div>
+            
+            <div class="bg-black bg-opacity-50 p-3 rounded border border-green-500">
+              <h3 class="text-sm opacity-70 mb-1">Respostas 2xx</h3>
+              <p class="text-2xl font-bold" x-text="currentStats.success || 0"></p>
+            </div>
+            
+            <div class="bg-black bg-opacity-50 p-3 rounded border border-green-500">
+              <h3 class="text-sm opacity-70 mb-1">Erros/Falhas</h3>
+              <p class="text-2xl font-bold" x-text="currentStats.errors || 0"></p>
+            </div>
+          </div>
+          
+          <div x-show="testComplete" class="mt-4 p-3 bg-green-900 bg-opacity-30 rounded border border-green-500">
+            <h3 class="font-bold mb-2">Teste Concluído</h3>
+            <p>Total de requisições: <span x-text="finalStats.totalRequests"></span></p>
+            <p>Taxa média: <span x-text="finalStats.avgRps"></span> req/s</p>
+            <p>Duração: <span x-text="finalStats.duration"></span> segundos</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Terminal de Logs -->
+      <div class="terminal-window matrix-bg p-4 rounded-lg col-span-1 lg:col-span-3 h-64 overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4 border-b border-green-500 pb-2">Terminal de Logs</h2>
+        
+        <div id="logs" class="font-mono text-sm space-y-1">
+          <template x-for="(log, index) in logs" :key="index">
+            <div class="log-line py-1">
+              <span class="opacity-70" x-text="log.time"></span>
+              <span x-text="log.message" :class="log.type === 'error' ? 'text-red-400' : (log.type === 'success' ? 'text-green-400' : '')"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function appData() {
+      return {
+        target: '',
+        rps: 100,
+        duration: 30,
+        testRunning: false,
+        hasResults: false,
+        testComplete: false,
+        socket: null,
+        logs: [],
+        currentStats: {
+          rps: 0,
+          latency: 0,
+          success: 0,
+          errors: 0
+        },
+        finalStats: {
+          totalRequests: 0,
+          avgRps: 0,
+          duration: 0
+        },
+        
+        init() {
+          this.socket = io();
+          
+          this.addLog('Sistema inicializado', 'info');
+          this.addLog('Aguardando configuração do alvo...', 'info');
+          
+          this.socket.on('testUpdate', (data) => {
+            this.hasResults = true;
+            this.currentStats.rps = Math.round(data.metrics.rps || 0);
+            this.currentStats.latency = Math.round(data.metrics.latency?.mean || 0);
+            this.currentStats.success = data.metrics.statusCodeStats?.['2xx'] || 0;
+            this.currentStats.errors = (data.metrics.errors || 0) + (data.metrics.non2xx || 0);
+            
+            this.addLog(`Taxa: ${this.currentStats.rps} req/s | Latência: ${this.currentStats.latency}ms | Sucesso: ${this.currentStats.success} | Erros: ${this.currentStats.errors}`, 'info');
+          });
+          
+          this.socket.on('testComplete', (data) => {
+            this.testRunning = false;
+            this.testComplete = true;
+            
+            this.finalStats.totalRequests = data.results.requests?.total || 0;
+            this.finalStats.avgRps = Math.round(data.results.requests?.average || 0);
+            this.finalStats.duration = data.results.duration;
+            
+            this.addLog(`Teste concluído. ${this.finalStats.totalRequests} requisições em ${this.finalStats.duration} segundos.`, 'success');
+          });
+          
+          this.socket.on('testError', (data) => {
+            this.addLog(`ERRO: ${data.error}`, 'error');
+            this.testRunning = false;
+          });
+        },
+        
+        startTest() {
+          if (!this.target) {
+            this.addLog('ERRO: Especifique um alvo válido', 'error');
+            return;
+          }
+          
+          if (this.rps < 1 || this.duration < 5) {
+            this.addLog('ERRO: Parâmetros inválidos', 'error');
+            return;
+          }
+          
+          this.testRunning = true;
+          this.testComplete = false;
+          this.hasResults = false;
+          this.currentStats = {
+            rps: 0,
+            latency: 0,
+            success: 0,
+            errors: 0
+          };
+          
+          this.addLog(`Iniciando teste contra ${this.target} com ${this.rps} req/s por ${this.duration}s`, 'info');
+          
+          fetch('/api/test', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              target: this.target,
+              rps: this.rps,
+              duration: this.duration
+            })
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.error) {
+              this.addLog(`ERRO: ${data.error}`, 'error');
+              this.testRunning = false;
+            } else {
+              this.addLog(`Teste iniciado com ID: ${data.id}`, 'success');
+            }
+          })
+          .catch(error => {
+            this.addLog(`ERRO: ${error.message}`, 'error');
+            this.testRunning = false;
+          });
+        },
+        
+        addLog(message, type = 'info') {
+          const now = new Date();
+          const time = `[${now.toLocaleTimeString()}] `;
+          
+          this.logs.unshift({
+            time,
+            message,
+            type
+          });
+          
+          // Limitar logs a 100 entradas
+          if (this.logs.length > 100) {
+            this.logs.pop();
+          }
+        }
+      };
+    }
+  </script>
+</body>
+  </html>
